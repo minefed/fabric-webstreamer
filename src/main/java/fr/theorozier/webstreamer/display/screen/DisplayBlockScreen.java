@@ -35,6 +35,7 @@ public class DisplayBlockScreen extends Screen {
     private static final Text HEIGHT_TEXT = Text.translatable("gui.webstreamer.display.height");
     private static final Text OFFSET_X_TEXT = Text.translatable("gui.webstreamer.display.offsetX");
     private static final Text OFFSET_Y_TEXT = Text.translatable("gui.webstreamer.display.offsetY");
+    private static final Text OFFSET_Z_TEXT = Text.translatable("gui.webstreamer.display.offsetZ");
     private static final Text SOURCE_TYPE_TEXT = Text.translatable("gui.webstreamer.display.sourceType");
     private static final Text SOURCE_TYPE_RAW_TEXT = Text.translatable("gui.webstreamer.display.sourceType.raw");
     private static final Text SOURCE_TYPE_TWITCH_TEXT = Text.translatable("gui.webstreamer.display.sourceType.twitch");
@@ -59,7 +60,7 @@ public class DisplayBlockScreen extends Screen {
     /** The block entity this screen is opened on. The following fields are temporaries to save later. */
     private final DisplayBlockEntity display;
 
-    private TextFieldWidget widthField, heightField, offsetXField, offsetYField;
+    private TextFieldWidget widthField, heightField, offsetXField, offsetYField, offsetZField;
     private AudioDistanceSliderWidget audioDistanceSlider;
     private AudioVolumeSliderWidget audioVolumeSlider;
     private CyclingButtonWidget<SourceType> sourceTypeButton;
@@ -87,7 +88,7 @@ public class DisplayBlockScreen extends Screen {
         int xHalf = this.width / 2;
         int yTop = 60;
 
-        if (this.height < 320) {
+        if (this.height < 360) {
             yTop = 35;
         }
 
@@ -96,7 +97,7 @@ public class DisplayBlockScreen extends Screen {
         confText.setTextColor(0xFFFFFF);
         this.addDrawableChild(confText);
 
-        // Size section
+        // Size section (first row)
         TextWidget widthText = new TextWidget(WIDTH_TEXT, this.textRenderer);
         widthText.setPosition(xHalf - 154, yTop + 1);
         widthText.setTextColor(0xA0A0A0);
@@ -104,47 +105,64 @@ public class DisplayBlockScreen extends Screen {
         this.addDrawableChild(widthText);
 
         TextWidget heightText = new TextWidget(HEIGHT_TEXT, this.textRenderer);
-        heightText.setPosition(xHalf - 96, yTop + 1);
+        heightText.setPosition(xHalf - 46, yTop + 1);
         heightText.setTextColor(0xA0A0A0);
         heightText.alignLeft();
         this.addDrawableChild(heightText);
 
         String widthVal = widthField == null ? Float.toString(this.display.getWidth()) : widthField.getText();
-        widthField = new TextFieldWidget(this.textRenderer, xHalf - 154, yTop + 11, 50, 18, Text.empty());
+        widthField = new TextFieldWidget(this.textRenderer, xHalf - 154, yTop + 11, 100, 18, Text.empty());
         widthField.setText(widthVal);
         widthField.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(widthField);
 
         String heightVal = heightField == null ? Float.toString(this.display.getHeight()) : heightField.getText();
-        heightField = new TextFieldWidget(this.textRenderer, xHalf - 96, yTop + 11, 50, 18, Text.empty());
+        heightField = new TextFieldWidget(this.textRenderer, xHalf - 46, yTop + 11, 100, 18, Text.empty());
         heightField.setText(heightVal);
         heightField.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(heightField);
 
-        // Offset section
+        // Offset section (second row)
+        int yOffsetRow = yTop + 40;
+
         TextWidget offsetXText = new TextWidget(OFFSET_X_TEXT, this.textRenderer);
-        offsetXText.setPosition(xHalf - 38, yTop + 1);
+        offsetXText.setPosition(xHalf - 154, yOffsetRow + 1);
         offsetXText.setTextColor(0xA0A0A0);
         offsetXText.alignLeft();
         this.addDrawableChild(offsetXText);
 
         TextWidget offsetYText = new TextWidget(OFFSET_Y_TEXT, this.textRenderer);
-        offsetYText.setPosition(xHalf + 20, yTop + 1);
+        offsetYText.setPosition(xHalf - 52, yOffsetRow + 1);
         offsetYText.setTextColor(0xA0A0A0);
         offsetYText.alignLeft();
         this.addDrawableChild(offsetYText);
 
+        TextWidget offsetZText = new TextWidget(OFFSET_Z_TEXT, this.textRenderer);
+        offsetZText.setPosition(xHalf + 50, yOffsetRow + 1);
+        offsetZText.setTextColor(0xA0A0A0);
+        offsetZText.alignLeft();
+        this.addDrawableChild(offsetZText);
+
         String offsetXVal = offsetXField == null ? Double.toString(this.display.getOffsetX()) : offsetXField.getText();
-        offsetXField = new TextFieldWidget(this.textRenderer, xHalf - 38, yTop + 11, 50, 18, Text.empty());
+        offsetXField = new TextFieldWidget(this.textRenderer, xHalf - 154, yOffsetRow + 11, 94, 18, Text.empty());
         offsetXField.setText(offsetXVal);
         offsetXField.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(offsetXField);
 
         String offsetYVal = offsetYField == null ? Double.toString(this.display.getOffsetY()) : offsetYField.getText();
-        offsetYField = new TextFieldWidget(this.textRenderer, xHalf + 20, yTop + 11, 50, 18, Text.empty());
+        offsetYField = new TextFieldWidget(this.textRenderer, xHalf - 52, yOffsetRow + 11, 94, 18, Text.empty());
         offsetYField.setText(offsetYVal);
         offsetYField.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(offsetYField);
+
+        String offsetZVal = offsetZField == null ? Double.toString(this.display.getOffsetZ()) : offsetZField.getText();
+        offsetZField = new TextFieldWidget(this.textRenderer, xHalf + 50, yOffsetRow + 11, 94, 18, Text.empty());
+        offsetZField.setText(offsetZVal);
+        offsetZField.setChangedListener(val -> this.dirty = true);
+        this.addDrawableChild(offsetZField);
+
+        // Source type section (third row)
+        int ySourceTypeRow = yOffsetRow + 40;
 
         DisplaySource source = this.display.getSource();
         SourceType sourceType = SourceType.RAW;
@@ -156,7 +174,7 @@ public class DisplayBlockScreen extends Screen {
 
         sourceTypeButton = CyclingButtonWidget.builder(SourceType::getText)
                 .values(SourceType.values())
-                .build(xHalf + 78, yTop + 10, 76, 20, SOURCE_TYPE_TEXT, (widget, val) -> {
+                .build(xHalf - 154, ySourceTypeRow + 10, 308, 20, SOURCE_TYPE_TEXT, (widget, val) -> {
                     // When cycling, we reset the UI to adapt for the new source type.
                     if (this.client != null) {
                         this.init(this.client, this.width, this.height);
@@ -165,17 +183,20 @@ public class DisplayBlockScreen extends Screen {
         sourceTypeButton.setValue(sourceType);
         this.addDrawableChild(sourceTypeButton);
 
+        // Audio section (fourth row)
+        int yAudioRow = ySourceTypeRow + 40;
+
         float audioDistanceVal = audioDistanceSlider == null ? this.display.getAudioDistance() : audioDistanceSlider.getDistance();
-        audioDistanceSlider = new AudioDistanceSliderWidget(xHalf - 154, yTop + 36, 150, 20, audioDistanceVal, 64);
+        audioDistanceSlider = new AudioDistanceSliderWidget(xHalf - 154, yAudioRow, 150, 20, audioDistanceVal, 64);
         audioDistanceSlider.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(audioDistanceSlider);
 
         float audioVolumeVal = audioVolumeSlider == null ? this.display.getAudioVolume() : audioVolumeSlider.getVolume();
-        audioVolumeSlider = new AudioVolumeSliderWidget(xHalf + 4, yTop + 36, 150, 20, audioVolumeVal);
+        audioVolumeSlider = new AudioVolumeSliderWidget(xHalf + 4, yAudioRow, 150, 20, audioVolumeVal);
         audioVolumeSlider.setChangedListener(val -> this.dirty = true);
         this.addDrawableChild(audioVolumeSlider);
 
-        int ySourceTop = yTop + 70;
+        int ySourceTop = yAudioRow + 40;
         int ySourceBottom = ySourceTop;
 
         if (sourceType == SourceType.RAW) {
@@ -292,7 +313,7 @@ public class DisplayBlockScreen extends Screen {
     private boolean refresh(boolean commit) {
 
         float width, height;
-        double offsetX, offsetY;
+        double offsetX, offsetY, offsetZ;
 
         try {
             width = Float.parseFloat(this.widthField.getText());
@@ -305,6 +326,7 @@ public class DisplayBlockScreen extends Screen {
         try {
             offsetX = Double.parseDouble(this.offsetXField.getText());
             offsetY = Double.parseDouble(this.offsetYField.getText());
+            offsetZ = Double.parseDouble(this.offsetZField.getText());
         } catch (NumberFormatException e) {
             this.showError(ERR_INVALID_OFFSET);
             return false;
@@ -364,7 +386,7 @@ public class DisplayBlockScreen extends Screen {
         if (commit) {
 
             this.display.setSize(width, height);
-            this.display.setOffset(offsetX, offsetY);
+            this.display.setOffset(offsetX, offsetY, offsetZ);
 
             float audioDistance = this.audioDistanceSlider.getDistance();
             float audioVolume = this.audioVolumeSlider.getVolume();

@@ -64,6 +64,14 @@ tasks.withType(JavaCompile).configureEach {
 	it.options.release = 17
 }
 
+test {
+	// Minecraft's logging setup must not create untracked files in the source tree.
+	workingDir = layout.buildDirectory.dir('test-run').get().asFile
+	doFirst {
+		workingDir.mkdirs()
+	}
+}
+
 java {
 	// Loom will automatically attach sourcesJar to a RemapSourcesJar task and to the "build" task
 	// if it is present.

@@ -28,6 +28,8 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
+	testImplementation "junit:junit:4.13.2"
+
 	implementation "io.lindstrom:m3u8-parser:${project.m3u8_parser_version}"
 	implementation "org.bytedeco:javacv-platform:${project.javacv_version}"
 	implementation "com.github.weisj:jsvg:${project.jsvg_parser}"

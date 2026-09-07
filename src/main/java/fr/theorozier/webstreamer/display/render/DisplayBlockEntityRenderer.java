@@ -20,9 +20,12 @@ import net.minecraft.client.render.block.entity.BlockEntityRendererFactory;
 import net.minecraft.client.util.math.MatrixStack;
 import net.minecraft.entity.player.PlayerEntity;
 import net.minecraft.item.ItemStack;
+import net.minecraft.server.network.ChunkFilter;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.BlockPos;
+import net.minecraft.util.math.ChunkSectionPos;
 import net.minecraft.util.math.Direction;
+import net.minecraft.util.math.Vec3d;
 import net.minecraft.util.shape.VoxelShape;
 
 import org.joml.AxisAngle4d;
@@ -52,6 +55,23 @@ public class DisplayBlockEntityRenderer implements BlockEntityRenderer<DisplayBl
     @SuppressWarnings("unused")
     public DisplayBlockEntityRenderer(BlockEntityRendererFactory.Context ctx) {
         this.textRenderer = ctx.getTextRenderer();
+    }
+
+    @Override
+    public boolean isInRenderDistance(DisplayBlockEntity entity, Vec3d cameraPos) {
+        return isInRenderDistance(entity.getPos(), cameraPos,
+                MinecraftClient.getInstance().options.getClampedViewDistance());
+    }
+
+    static boolean isInRenderDistance(BlockPos displayPos, Vec3d cameraPos, int viewDistance) {
+        // Match terrain's horizontal chunk range, including its rounded boundary.
+        // The default block entity check cuts displays off at 64 blocks and includes height.
+        return ChunkFilter.isWithinDistanceExcludingEdge(
+                ChunkSectionPos.getSectionCoord(cameraPos.x),
+                ChunkSectionPos.getSectionCoord(cameraPos.z),
+                viewDistance,
+                ChunkSectionPos.getSectionCoord(displayPos.getX()),
+                ChunkSectionPos.getSectionCoord(displayPos.getZ()));
     }
 
     @Override

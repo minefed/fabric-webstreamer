@@ -11,7 +11,7 @@ import io.lindstrom.m3u8.parser.ParsingMode;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import net.minecraft.util.math.Vec3i;
-import net.minecraft.util.profiler.ProfilerSystem;
+import net.minecraft.util.profiler.DummyProfiler;
 import net.minecraft.util.profiler.ReadableProfiler;
 import org.bytedeco.javacv.Frame;
 
@@ -97,8 +97,8 @@ public class DisplayLayerHls extends DisplayLayerSimple {
 		super(uri, res);
 		
         this.hlsParser = new MediaPlaylistParser(ParsingMode.LENIENT);
-		this.profiler = new ProfilerSystem(System::nanoTime, () -> 0, true);
-		// this.profiler = DummyProfiler.INSTANCE;
+		// Nothing reads the profile result; a real profiler only cost a path string per push.
+		this.profiler = DummyProfiler.INSTANCE;
   
 		this.asyncPlaylist = new AsyncProcessor<>(this::requestPlaylistBlocking, true);
 		this.asyncGrabbers = new AsyncMap<>(this::requestGrabberBlocking, grabber -> {

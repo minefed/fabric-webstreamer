@@ -193,8 +193,10 @@ public class FrameGrabber {
 	}
 
 	public void grabRemaining(Consumer<AudioStreamingBuffer> audioBufferConsumer) throws IOException {
+		// Remaining images are discarded, so skip their packets instead of decoding them.
+		// Audio packets reach the audio decoder in the same order either way.
 		Frame frame;
-		while ((frame = this.grabber.grab()) != null) {
+		while ((frame = this.grabber.grabSamples()) != null) {
 			if (frame.samples != null) {
 				audioBufferConsumer.accept(AudioStreamingBuffer.fromFrame(this.tempAudioBuffer, frame));
 			}

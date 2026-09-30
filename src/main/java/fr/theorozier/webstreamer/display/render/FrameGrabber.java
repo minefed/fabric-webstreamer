@@ -64,6 +64,9 @@ public class FrameGrabber {
 			ByteArrayInputStream grabberStream = new ByteArrayInputStream(this.buffer.array(), this.buffer.position(), this.buffer.remaining());
 
 			this.grabber = new FFmpegFrameGrabber(grabberStream);
+			// Automatic threading uses up to 16 decoder threads, each holding frames; two grabbers
+			// exist per stream. Three threads decode the same frames with less native memory.
+			this.grabber.setVideoOption("threads", "3");
 			this.grabber.startUnsafe();
 
 			this.tempAudioBuffer = this.pools.allocAudioBuffer();

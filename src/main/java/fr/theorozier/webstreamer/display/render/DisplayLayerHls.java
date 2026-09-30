@@ -116,6 +116,12 @@ public class DisplayLayerHls extends DisplayLayerSimple {
 	public boolean cleanup(long now) {
 		if (super.cleanup(now)) {
 			this.asyncGrabbers.cleanup(this.res.getExecutor());
+			if (this.grabber != null) {
+				// The current grabber holds a native decoder and a pooled raw file buffer
+				final FrameGrabber currentGrabber = this.grabber;
+				this.grabber = null;
+				this.res.getExecutor().execute(currentGrabber::stop);
+			}
 			this.audioSource.free();
 			return true;
 		} else {

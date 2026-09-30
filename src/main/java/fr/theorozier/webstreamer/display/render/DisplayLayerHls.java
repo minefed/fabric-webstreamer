@@ -91,6 +91,10 @@ public class DisplayLayerHls extends DisplayLayerSimple {
 	// Timing //
 	/** Time in nanoseconds (monotonic) of the last internal cleanup. */
 	private long lastCleanup = 0;
+	/** Time in nanoseconds (monotonic) of the previous tick. */
+	private long previousTick = 0;
+	/** Whether this layer was drawn since the previous tick. */
+	private boolean drawnSinceLastTick = true;
 
     public DisplayLayerHls(URI uri, DisplayLayerResources res) {
 
@@ -454,7 +458,11 @@ public class DisplayLayerHls extends DisplayLayerSimple {
 		
 		if (frame != null) {
 			this.profiler.push("upload_image");
-			this.tex.upload(frame);
+			// A layer that was not drawn last frame is out of view: keep decoding for audio and timing,
+			// but skip the texture upload. When it is drawn again, the next new frame is uploaded.
+			if (this.drawnSinceLastTick) {
+				this.tex.upload(frame);
+			}
 			this.profiler.swap("play_audio");
 			this.audioSource.playFrom(frame.timestamp);
 			this.profiler.pop();
@@ -467,6 +475,10 @@ public class DisplayLayerHls extends DisplayLayerSimple {
 
         this.profiler.startTick();
         this.profiler.push("tick");
+
+		final long tickStart = System.nanoTime();
+		this.drawnSinceLastTick = this.lastUse >= this.previousTick;
+		this.previousTick = tickStart;
 		
 		if (!this.isLost()) {
 			// Only fetch if this layer is not lost, because if it's lost, it should be

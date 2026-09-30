@@ -75,6 +75,19 @@ public class DisplayLayerResources {
 		}
 	}
 	
+	/**
+	 * Releases idle raw file buffers beyond the given number. Buffers in use are not affected; the pool
+	 * allocates again when needed.
+	 */
+	public void trimRawFileBuffers(int keepIdle) {
+		synchronized (this.rawFileBuffers) {
+			while (this.rawFileBuffers.size() > keepIdle) {
+				this.rawFileBuffers.remove(this.rawFileBuffers.size() - 1);
+				this.rawFileBuffersCount--;
+			}
+		}
+	}
+
 	public void freeRawFileBuffer(ByteBuffer buffer) {
 		synchronized (this.rawFileBuffers) {
 			this.rawFileBuffers.add(buffer);

@@ -38,6 +38,8 @@ public class DisplayLayerManager extends DisplayLayerMap<URI> {
         long now = System.nanoTime();
         if (now - this.lastCleanup >= CLEANUP_INTERVAL) {
             super.cleanup(now); // Super to avoid redundant render thread check.
+            // Keep two idle 8 MiB buffers (current and next segment of one stream)
+            this.res.trimRawFileBuffers(2);
             this.lastCleanup = now;
         }
 
@@ -46,7 +48,12 @@ public class DisplayLayerManager extends DisplayLayerMap<URI> {
     @Override
     public boolean cleanup(long now) {
         RenderSystem.assertOnRenderThread();
-        return super.cleanup(now);
+        final boolean result = super.cleanup(now);
+        if (now == 0) {
+            // Leaving the world: no layer remains to reuse the buffers
+            this.res.trimRawFileBuffers(0);
+        }
+        return result;
     }
 
     @Override

@@ -218,16 +218,17 @@ public class ImageSourceCacheTest {
     }
 
     @Test
-    public void deadlineCancelsTransportAndNextAttemptCanRecover() throws Exception {
+    public void networkTimeoutReleasesSlotAndNextAttemptCanRecover() throws Exception {
         Fixture f = new Fixture(1024, 1, 2, 40);
         var a = f.cache.request(A);
+        assertEquals(Duration.ofMillis(40), f.requests.get(0).timeout().orElseThrow());
+        f.responses.get(0).completeExceptionally(new java.net.http.HttpTimeoutException("fixture"));
         try {
             a.future().get(2, TimeUnit.SECONDS);
             fail("Expected timeout");
         } catch (ExecutionException expected) {
-            assertTrue(expected.getCause() instanceof java.util.concurrent.TimeoutException);
+            assertTrue(expected.getCause() instanceof java.net.http.HttpTimeoutException);
         }
-        assertTrue(f.responses.get(0).isCancelled());
         var retry = f.cache.request(A);
         f.answer(1, 200, "recovered", Map.of());
         assertEquals("recovered", new String(retry.future().get(), StandardCharsets.UTF_8));
@@ -287,7 +288,7 @@ public class ImageSourceCacheTest {
     }
 
     @Test
-    public void actualHttpClientDeadlineIncludesBodyAfterHeaders() throws Exception {
+    public void actualHttpClientTimesOutBodyWithoutProgressAfterHeaders() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         CountDownLatch headersSent = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -306,7 +307,8 @@ public class ImageSourceCacheTest {
         });
         server.start();
         try {
-            ImageSourceCache cache = new ImageSourceCache(HttpClient.newHttpClient(), 1024, 1, 8, Duration.ofSeconds(1));
+            ImageSourceCache cache = new ImageSourceCache(HttpClient.newHttpClient(), 1024, 1, 8,
+                    Duration.ofSeconds(1), Duration.ofMillis(300));
             URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/stalled.png");
             try (var request = cache.request(uri)) {
                 assertTrue(headersSent.await(2, TimeUnit.SECONDS));

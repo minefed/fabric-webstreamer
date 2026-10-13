@@ -19,8 +19,6 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 import java.util.function.LongSupplier;
 
@@ -39,8 +37,13 @@ public final class ImageSourceCache {
     private int active;
 
     public ImageSourceCache(HttpClient client, long byteBudget, int concurrency, int queueLimit, Duration timeout) {
+        this(client, byteBudget, concurrency, queueLimit, timeout, Duration.ofSeconds(30));
+    }
+
+    public ImageSourceCache(HttpClient client, long byteBudget, int concurrency, int queueLimit,
+                            Duration timeout, Duration bodyIdleTimeout) {
         this(byteBudget, concurrency, queueLimit, timeout, System::currentTimeMillis,
-                request -> client.sendAsync(request, HttpResponse.BodyHandlers.ofByteArray()));
+                new ImageHttpClient(client, bodyIdleTimeout)::send);
     }
 
     ImageSourceCache(long byteBudget, int concurrency, int queueLimit, Duration timeout, LongSupplier clock,
@@ -98,9 +101,7 @@ public final class ImageSourceCache {
                     job.previous.headers.firstValue("Last-Modified").ifPresent(value -> builder.header("If-Modified-Since", value));
                 }
                 job.network = transport.apply(builder.build());
-                // The deadline covers the complete body, including a peer which sends headers then stalls.
-                job.network.copy().orTimeout(timeout.toMillis(), TimeUnit.MILLISECONDS)
-                        .whenComplete((response, error) -> finish(job, response, error));
+                job.network.whenComplete((response, error) -> finish(job, response, error));
             } catch (RuntimeException exception) {
                 finish(job, null, exception);
             }
@@ -119,9 +120,6 @@ public final class ImageSourceCache {
         byte[] bytes = null;
         if (error instanceof CompletionException && error.getCause() != null) {
             error = error.getCause();
-        }
-        if (error instanceof TimeoutException && job.network != null) {
-            job.network.cancel(true);
         }
         if (!job.requests.isEmpty() && error == null) {
             try {

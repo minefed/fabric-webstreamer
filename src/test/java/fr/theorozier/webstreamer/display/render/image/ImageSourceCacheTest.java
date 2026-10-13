@@ -19,6 +19,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -281,6 +282,44 @@ public class ImageSourceCacheTest {
             assertEquals(2, requests.get());
             assertEquals(1, bodies.get());
         } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    public void actualHttpClientDeadlineIncludesBodyAfterHeaders() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        CountDownLatch headersSent = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        server.createContext("/stalled.png", exchange -> {
+            try {
+                exchange.sendResponseHeaders(200, 100);
+                exchange.getResponseBody().write(1);
+                exchange.getResponseBody().flush();
+                headersSent.countDown();
+                release.await(4, TimeUnit.SECONDS);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+            } finally {
+                exchange.close();
+            }
+        });
+        server.start();
+        try {
+            ImageSourceCache cache = new ImageSourceCache(HttpClient.newHttpClient(), 1024, 1, 8, Duration.ofSeconds(1));
+            URI uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort() + "/stalled.png");
+            try (var request = cache.request(uri)) {
+                assertTrue(headersSent.await(2, TimeUnit.SECONDS));
+                try {
+                    request.future().get(2, TimeUnit.SECONDS);
+                    fail("Body stalled after headers must time out");
+                } catch (ExecutionException expected) {
+                    assertTrue(expected.getCause() instanceof java.util.concurrent.TimeoutException
+                            || expected.getCause() instanceof java.net.http.HttpTimeoutException);
+                }
+            }
+        } finally {
+            release.countDown();
             server.stop(0);
         }
     }

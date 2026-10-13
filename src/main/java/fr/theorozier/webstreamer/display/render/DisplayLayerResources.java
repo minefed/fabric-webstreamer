@@ -1,11 +1,13 @@
 package fr.theorozier.webstreamer.display.render;
 
 import fr.theorozier.webstreamer.WebStreamerMod;
+import fr.theorozier.webstreamer.display.render.image.ImageSourceCache;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import org.jetbrains.annotations.NotNull;
 
 import java.net.http.HttpClient;
+import java.time.Duration;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.ShortBuffer;
@@ -14,6 +16,9 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -42,6 +47,20 @@ public class DisplayLayerResources {
 	});
 	
 	private final HttpClient httpClient = HttpClient.newHttpClient();
+	// Keep compressed originals across short GPU-layer lifetimes; HTTP headers decide freshness.
+	private final ImageSourceCache imageSources = new ImageSourceCache(this.httpClient, 64L << 20, 4, 256,
+			Duration.ofSeconds(5), Duration.ofSeconds(30));
+	// HTTP waits never occupy these CPU workers, or the existing HLS segment/decoder queue.
+	private final ExecutorService imageDecoders = new ThreadPoolExecutor(2, 2, 30, TimeUnit.SECONDS,
+			new ArrayBlockingQueue<>(256), new ThreadFactory() {
+				private final AtomicInteger counter = new AtomicInteger();
+				@Override
+				public Thread newThread(@NotNull Runnable runnable) {
+					Thread thread = new Thread(runnable, "WebStreamer Image Decode (" + counter.getAndIncrement() + ")");
+					thread.setDaemon(true);
+					return thread;
+				}
+			});
 	private final List<ByteBuffer> rawFileBuffers = new ArrayList<>();
 	private final List<ShortBuffer> audioBuffers = new ArrayList<>();
 	
@@ -54,6 +73,14 @@ public class DisplayLayerResources {
 	
 	public HttpClient getHttpClient() {
 		return this.httpClient;
+	}
+
+	public ImageSourceCache getImageSources() {
+		return this.imageSources;
+	}
+
+	public ExecutorService getImageDecoders() {
+		return this.imageDecoders;
 	}
 	
 	/**

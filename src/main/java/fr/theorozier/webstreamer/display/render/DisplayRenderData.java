@@ -3,6 +3,7 @@ package fr.theorozier.webstreamer.display.render;
 import fr.theorozier.webstreamer.WebStreamerMod;
 import fr.theorozier.webstreamer.display.DisplayBlockEntity;
 import fr.theorozier.webstreamer.display.source.DisplaySource;
+import fr.theorozier.webstreamer.display.source.RawDisplaySource;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 
@@ -52,7 +53,14 @@ public class DisplayRenderData {
 		
 		if (this.sourceDirty) {
 			this.uri = null;
-			this.futureUri = executor.submit(() -> this.display.getSource().getUri());
+			DisplaySource source = this.display.getSource();
+			if (source instanceof RawDisplaySource) {
+				// Raw URLs are already parsed. Do not queue this field read behind HLS network/decoder work.
+				this.uri = source.getUri();
+				this.futureUri = null;
+			} else {
+				this.futureUri = executor.submit(source::getUri);
+			}
 			this.sourceDirty = false;
 		}
 		

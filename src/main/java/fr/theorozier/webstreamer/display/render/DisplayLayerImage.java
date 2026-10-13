@@ -2,6 +2,7 @@ package fr.theorozier.webstreamer.display.render;
 
 import com.mojang.blaze3d.platform.TextureUtil;
 import fr.theorozier.webstreamer.WebStreamerMod;
+import fr.theorozier.webstreamer.display.render.image.ImageLoadTask;
 import net.fabricmc.api.EnvType;
 import net.fabricmc.api.Environment;
 import org.apache.commons.io.IOUtils;
@@ -12,24 +13,20 @@ import org.lwjgl.system.MemoryUtil;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ByteArrayInputStream;
 import java.net.URI;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
-import java.time.Duration;
-import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
-import java.util.concurrent.Future;
 
 @Environment(EnvType.CLIENT)
 public class DisplayLayerImage extends DisplayLayerSimple {
 	
-	private static final long FAILING_IMAGE_REQUEST_INTERVAL = 30L * 1000000000L;
-	
 	private long imageNextRequestTimestamp = 0;
 	private boolean imageUploaded = false;
-	private Future<STBLoadedImage> futureImage;
+	private ImageLoadTask<STBLoadedImage> futureImage;
+	private int consecutiveFailures;
+	private boolean released;
 	
 	public DisplayLayerImage(URI uri, DisplayLayerResources res) {
 		super(uri, res);
@@ -42,12 +39,16 @@ public class DisplayLayerImage extends DisplayLayerSimple {
 
 	@Override
 	public void tick() {
+		if (this.released) {
+			return;
+		}
 		
 		long now = System.nanoTime();
 		
 		if (this.futureImage == null) {
 			if (!this.imageUploaded && now >= this.imageNextRequestTimestamp) {
-				this.futureImage = this.res.getExecutor().submit(this::requestImageBlocking);
+				this.futureImage = new ImageLoadTask<>(this.res.getImageSources(), this.uri,
+						this.res.getImageDecoders(), bytes -> this.readImageBlocking(new ByteArrayInputStream(bytes)));
 			}
 		} else if (this.futureImage.isDone()) {
 			
@@ -55,22 +56,27 @@ public class DisplayLayerImage extends DisplayLayerSimple {
 			
 			try {
 				
-				img = this.futureImage.get();
+				img = this.futureImage.take();
+				if (img == null) {
+					return;
+				}
 				
 				WebStreamerMod.LOGGER.info(makeLog("Uploading image... (channels: {}, pixel size: {})"), img.channels, img.buffer.remaining() / (img.width * img.height));
 				
 				this.tex.uploadRaw(img.buffer, GL11.GL_RGBA, img.width, img.height, img.width, GL11.GL_RGBA, 4);
 				this.imageUploaded = true;
+				this.consecutiveFailures = 0;
 				
-			} catch (InterruptedException | CancellationException e) {
-				// Should not happen
 			} catch (ExecutionException e) {
-				WebStreamerMod.LOGGER.error(makeLog("Failed to request image, retrying in {} seconds."), FAILING_IMAGE_REQUEST_INTERVAL / 1000000000, e.getCause());
-				this.imageNextRequestTimestamp = now + FAILING_IMAGE_REQUEST_INTERVAL;
+				long delaySeconds = Math.min(30, 1L << Math.min(this.consecutiveFailures++, 5));
+				WebStreamerMod.LOGGER.error(makeLog("Failed to request image, retrying in {} seconds."), delaySeconds, e.getCause());
+				// A short initial retry avoids a fixed 30-second blank display; repeated failures still back off.
+				this.imageNextRequestTimestamp = now + delaySeconds * 1_000_000_000L;
 			} finally {
+				this.futureImage.close();
 				this.futureImage = null;
 				if (img != null) {
-					img.free();
+					img.close();
 				}
 			}
 			
@@ -78,18 +84,17 @@ public class DisplayLayerImage extends DisplayLayerSimple {
 		
 	}
 
-	protected STBLoadedImage requestImageBlocking() throws IOException {
-		try {
-			HttpRequest request = HttpRequest.newBuilder(this.uri).GET().timeout(Duration.ofSeconds(5)).build();
-			HttpResponse<InputStream> res = this.res.getHttpClient().send(request, HttpResponse.BodyHandlers.ofInputStream());
-			if (res.statusCode() == 200) {
-				return this.readImageBlocking(res.body());
-			} else {
-				throw new IOException("HTTP request failed, status code: " + res.statusCode());
+	@Override
+	public boolean cleanup(long now) {
+		if (this.released || super.cleanup(now)) {
+			this.released = true;
+			if (this.futureImage != null) {
+				this.futureImage.close();
+				this.futureImage = null;
 			}
-		} catch (InterruptedException e) {
-			throw new IOException(e);
+			return true;
 		}
+		return false;
 	}
 
 	protected STBLoadedImage readImageBlocking(InputStream stream) throws IOException {
@@ -113,9 +118,10 @@ public class DisplayLayerImage extends DisplayLayerSimple {
 		}
 	}
 
-	protected record STBLoadedImage(ByteBuffer buffer, int width, int height, int channels) {
+	protected record STBLoadedImage(ByteBuffer buffer, int width, int height, int channels) implements AutoCloseable {
 
-		private void free() {
+		@Override
+		public void close() {
 			STBImage.stbi_image_free(this.buffer);
 		}
 		

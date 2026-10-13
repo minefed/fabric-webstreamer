@@ -24,6 +24,36 @@ out of/back into range. Allow time for chunk loading and the initial image downl
 server with a smaller view distance to check the effective limit. This is a client rendering fix;
 clients need the patched JAR. Build target: Minecraft 1.20.4, Fabric Loader 0.16.14, Java 17.
 
+## Minefed image loading (1.5.0+minefed.2)
+Original image files now use a private, in-memory LRU cache with a 64 MiB byte budget,
+independent of the 15-second GPU texture lifetime. PNG resolution, SVG rasterization,
+texture upload, and HLS playback behavior remain unchanged. Revisiting a display can
+reuse its original file while still decoding and uploading a new texture when needed.
+The budget covers retained encoded files, not active downloads, decoded pixels, or GPU memory.
+Files larger than the budget still load at their original quality without being retained.
+
+HTTP `Cache-Control`, `Age`, `Date`, and `Expires` determine freshness. Fresh files need no
+request; stale files use `ETag`/`Last-Modified` conditional requests, and a `304` keeps the
+original bytes. `no-cache` and responses without explicit freshness always revalidate;
+`no-store` and `Vary: *` are not retained. Consequently, hosts should change the URL or
+use suitable cache headers when replacing an image before its advertised freshness expires.
+An already displayed image keeps its existing texture until its layer is recreated, as before.
+
+Concurrent consumers of one URL share its HTTP request. Images have four HTTP slots and
+two separate decoder workers; network waits no longer occupy the HLS worker queue. Each
+queue holds at most 256 waiting jobs. HTTP keeps its five-second header timeout; the body
+times out only after 30 seconds without progress, with no total download-duration limit.
+Failures retry after 1, 2, 4, 8, 16, then 30 seconds; saturation is retried
+through the same path. Closing a display releases its pending request and decoded result;
+cancellation during native decoding frees the result when decoding finishes.
+
+Automated checks cover fresh hits, changed responses, conditional `304`, cache directives,
+LRU eviction, simultaneous requests, stalled bodies, queue limits, and cancellation races.
+In-game verification should include returning to an image after leaving it for over 20
+seconds, replacing an expired/no-cache image, and playing HLS while loading several images.
+The cache removes eligible HTTP downloads; it does not promise a particular frame rate or
+remove the remaining image decode/upload cost.
+
 ## Supported systems
 For now, and in order to distribute a single JAR file, this mod supports a limited set of systems because of the size 
 of the [FFmpeg] library and other native binaries that needs to be bundled with it:
